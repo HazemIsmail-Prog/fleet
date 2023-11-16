@@ -4,15 +4,26 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\CarResource\Pages;
 use App\Filament\Resources\CarResource\RelationManagers;
+use App\Filament\Resources\CarResource\RelationManagers\ActionsRelationManager;
+use App\Models\Action as ModelsAction;
 use App\Models\Car;
+use App\Models\Driver;
 use Filament\Forms;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Group;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Section;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Form;
+use Filament\Infolists\Infolist;
 use Filament\Resources\Resource;
 use Filament\Tables;
+use Filament\Tables\Actions\Action;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class CarResource extends Resource
@@ -150,9 +161,6 @@ class CarResource extends Resource
                             ->label('car.active')
                             ->required(),
                     ]),
-
-
-
             ]);
     }
 
@@ -251,7 +259,136 @@ class CarResource extends Resource
                 //
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Action::make('assign')
+                    ->button()
+                    ->outlined()
+                    ->color('success')
+                    ->translateLabel()
+                    ->label('car.assign')
+                    ->modalSubmitActionLabel(__('car.save'))
+                    ->slideOver()
+                    ->modalWidth('lg')
+                    ->visible(fn (Model $record) => $record->driver_id == null)
+                    ->form([
+                        DatePicker::make('date')
+                            ->translateLabel()
+                            ->label('car.date')
+                            ->default(today())
+                            ->required(),
+                        TimePicker::make('time')
+                            ->translateLabel()
+                            ->label('car.time')
+                            ->default(now())
+                            ->seconds(false)
+                            ->required(),
+                        Select::make('driver_id')
+                            ->translateLabel()
+                            ->label('car.driver')
+                            ->required()
+                            ->options(Driver::pluck('name', 'id'))
+                            ->searchable(),
+                        TextInput::make('kilos')
+                            ->translateLabel()
+                            ->label('car.kilos')
+                            ->required()
+                            ->numeric(),
+                        Radio::make('fuel')
+                            ->translateLabel()
+                            ->label('car.fuel')
+                            ->required()
+                            ->options([
+                                '0' => __('car.empty'),
+                                '1' => '1/4',
+                                '2' => '1/2',
+                                '3' => __('car.full'),
+                            ])
+                            ->default('1'),
+                        TextInput::make('notes')
+                            ->translateLabel()
+                            ->label('car.notes'),
+                    ])->action(function (Model $record, $data) {
+                        ModelsAction::create([
+                            'car_id' => $record->id,
+                            'driver_id' => $data['driver_id'],
+                            'user_id' => auth()->id(),
+                            'type' => 'assign',
+                            'notes' => $data['notes'],
+                            'date' => $data['date'],
+                            'time' => $data['time'],
+                            'fuel' => $data['fuel'],
+                            'kilos' => $data['kilos'],
+                        ]);
+
+                        $record->driver_id = $data['driver_id'];
+                        $record->save();
+                    }),
+
+
+
+
+                Action::make('unassign')
+                    ->button()
+                    ->outlined()
+                    ->color('danger')
+                    ->translateLabel()
+                    ->label('car.unassign')
+                    ->modalDescription(function (Model $record) {
+                        return $record->driver->name;
+                    })
+                    ->modalSubmitActionLabel(__('car.save'))
+                    ->slideOver()
+                    ->modalWidth('lg')
+                    ->visible(fn (Model $record) => $record->driver_id != null)
+                    ->form([
+                        DatePicker::make('date')
+                            ->translateLabel()
+                            ->label('car.date')
+                            ->default(today())
+                            ->required(),
+                        TimePicker::make('time')
+                            ->translateLabel()
+                            ->label('car.time')
+                            ->default(now())
+                            ->seconds(false)
+                            ->required(),
+                        TextInput::make('kilos')
+                            ->translateLabel()
+                            ->label('car.kilos')
+                            ->required()
+                            ->numeric(),
+                        Radio::make('fuel')
+                            ->translateLabel()
+                            ->label('car.fuel')
+                            ->required()
+                            ->options([
+                                '0' => __('car.empty'),
+                                '1' => '1/4',
+                                '2' => '1/2',
+                                '3' => __('car.full'),
+                            ])
+                            ->default('1'),
+                        TextInput::make('notes')
+                            ->translateLabel()
+                            ->label('car.notes'),
+                    ])->action(function (Model $record, $data) {
+                        ModelsAction::create([
+                            'car_id' => $record->id,
+                            'driver_id' => $record->driver_id,
+                            'user_id' => auth()->id(),
+                            'type' => 'unassign',
+                            'notes' => $data['notes'],
+                            'date' => $data['date'],
+                            'time' => $data['time'],
+                            'fuel' => $data['fuel'],
+                            'kilos' => $data['kilos'],
+                        ]);
+
+                        $record->driver_id = null;
+                        $record->technician_id = null;
+                        $record->save();
+                    }),
+
+                    Tables\Actions\ViewAction::make(),
             ])
             ->bulkActions([
                 // Tables\Actions\BulkActionGroup::make([
@@ -266,7 +403,7 @@ class CarResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            ActionsRelationManager::class
         ];
     }
 
@@ -275,6 +412,7 @@ class CarResource extends Resource
         return [
             'index' => Pages\ListCars::route('/'),
             'create' => Pages\CreateCar::route('/create'),
+            'view' => Pages\ViewCar::route('/{record}'),
             'edit' => Pages\EditCar::route('/{record}/edit'),
         ];
     }
